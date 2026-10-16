@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14532d">
+<meta name="description" content="A simple offline sales and expense tracker.">
+<link rel="manifest" href="./manifest.json">
+<title>ZedOffline</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#15251b;background:#f3f7f3}
+*{box-sizing:border-box}body{margin:0}header{background:#14532d;color:#fff;padding:20px 16px 18px}
+header h1{margin:0;font-size:1.45rem}header p{margin:5px 0 0;font-size:.92rem;opacity:.9}
+main{max-width:720px;margin:auto;padding:14px;display:grid;gap:14px}
+.card{background:#fff;border:1px solid #dce7de;border-radius:16px;padding:15px;box-shadow:0 2px 7px #16351a0b}
+h2{font-size:1.05rem;margin:0 0 12px}label{display:block;font-size:.9rem;font-weight:600;margin:10px 0 5px}
+input,select,button{font:inherit;width:100%;border-radius:10px;padding:12px;border:1px solid #c8d5ca;background:#fff;color:#15251b}
+button{border:0;background:#166534;color:#fff;font-weight:700;margin-top:12px;cursor:pointer}
+button.secondary{background:#e5efe7;color:#14532d}button.danger{background:#a32929}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#edf6ef;padding:12px;border-radius:12px}
+.metric span{display:block;font-size:.82rem;color:#4b6552}.metric strong{display:block;font-size:1.25rem;margin-top:4px;overflow-wrap:anywhere}
+small,.muted{color:#58705d}.row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid #edf1ed}.row:last-child{border-bottom:0}
+.row .desc{overflow-wrap:anywhere}.amount{font-weight:700;white-space:nowrap}.negative{color:#a32929}.positive{color:#166534}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.actions button{margin-top:0}
+footer{text-align:center;color:#607364;font-size:.8rem;padding:4px 14px 24px}
+#notice{font-size:.9rem;margin-top:8px;min-height:1.2em;color:#14532d}
+@media(min-width:560px){main{grid-template-columns:1fr 1fr}main .wide{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<header><h1>🌿 ZedOffline</h1><p>Your pocket sales & expense tracker — built for offline use.</p></header>
+<main>
+<section class="card wide">
+<h2>Today's overview</h2>
+<div class="grid">
+<div class="metric"><span>Sales</span><strong id="salesTotal">K0.00</strong></div>
+<div class="metric"><span>Expenses</span><strong id="expenseTotal">K0.00</strong></div>
+<div class="metric"><span>Net today</span><strong id="netTotal">K0.00</strong></div>
+<div class="metric"><span>Entries</span><strong id="entryCount">0</strong></div>
+</div>
+<p class="muted" id="todayLabel"></p>
+</section>
+<section class="card">
+<h2>Add a record</h2>
+<form id="entryForm">
+<label for="kind">Type</label>
+<select id="kind"><option value="sale">Sale / money received</option><option value="expense">Expense / money spent</option></select>
+<label for="description">Description</label>
+<input id="description" maxlength="80" placeholder="e.g. 2 drinks sold" required>
+<label for="amount">Amount (ZMW / K)</label>
+<input id="amount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="25.00" required>
+<label for="entryDate">Date</label>
+<input id="entryDate" type="date" required>
+<button type="submit">Save record</button>
+<div id="notice" role="status"></div>
+</form>
+</section>
+<section class="card">
+<h2>Recent records</h2>
+<div id="entries"><p class="muted">No records yet. Add your first sale or expense.</p></div>
+</section>
+<section class="card wide">
+<h2>Backup & data</h2>
+<p class="muted">Records stay in this browser on this phone. Export a backup regularly. Clearing browser data or uninstalling/resetting your phone may erase records.</p>
+<div class="actions">
+<button id="exportBtn" type="button" class="secondary">Export backup</button>
+<button id="importBtn" type="button" class="secondary">Import backup</button>
+</div>
+<input id="importFile" type="file" accept=".json,application/json" hidden>
+<button id="clearBtn" type="button" class="danger">Delete all records</button>
+<p class="muted">This is a simple cash record tool, not formal accounting or tax advice. “Net today” means sales minus expenses recorded for today; it is not necessarily full business profit.</p>
+</section>
+</main>
+<footer>ZedOffline • Private on this device • No account required</footer>
+<script>
+const KEY = "zedoffline.records.v1";
+const $ = (id) => document.getElementById(id);
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
+$("entryDate").value = today();
+$("todayLabel").textContent = "For " + new Date().toLocaleDateString(undefined,{weekday:"long",year:"numeric",month:"short",day:"numeric"});
+function readRecords(){try{return JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){return []}}
+function writeRecords(records){localStorage.setItem(KEY,JSON.stringify(records))}
+function money(n){return "K"+Number(n||0).toLocaleString("en-ZM",{minimumFractionDigits:2,maximumFractionDigits:2})}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function render(){
+ const records=readRecords(), day=today();
+ const todayRecords=records.filter(r=>r.date===day);
+ const sales=todayRecords.filter(r=>r.kind==="sale").reduce((a,r)=>a+r.amount,0);
+ const expenses=todayRecords.filter(r=>r.kind==="expense").reduce((a,r)=>a+r.amount,0);
+ $("salesTotal").textContent=money(sales);$("expenseTotal").textContent=money(expenses);
+ $("netTotal").textContent=money(sales-expenses);$("netTotal").className=(sales-expenses<0?"negative":"positive");
+ $("entryCount").textContent=String(todayRecords.length);
+ const recent=[...records].sort((a,b)=>(b.created||0)-(a.created||0)).slice(0,30);
+ $("entries").innerHTML=recent.length?recent.map(r=>`<div class="row"><div class="desc"><strong>${esc(r.description)}</strong><br><small>${esc(r.date)} · ${r.kind==="sale"?"Sale":"Expense"}</small></div><div class="amount ${r.kind==="sale"?"positive":"negative"}">${r.kind==="sale"?"+":"−"}${money(r.amount)}<br><button type="button" class="secondary deleteOne" data-id="${esc(r.id)}" style="padding:5px 8px;margin-top:5px;font-size:.78rem">Delete</button></div></div>`).join(""):'<p class="muted">No records yet. Add your first sale or expense.</p>';
+ document.querySelectorAll(".deleteOne").forEach(b=>b.addEventListener("click",()=>{if(confirm("Delete this record?")){writeRecords(readRecords().filter(r=>r.id!==b.dataset.id));render()}}));
+}
+$("entryForm").addEventListener("submit",e=>{
+ e.preventDefault();
+ const description=$("description").value.trim(),amount=Number($("amount").value),date=$("entryDate").value,kind=$("kind").value;
+ if(!description||!Number.isFinite(amount)||amount<=0||!date){$("notice").textContent="Check the description, amount and date.";return}
+ const records=readRecords();records.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),description,amount:Math.round(amount*100)/100,date,kind,created:Date.now()});
+ try{writeRecords(records);$("description").value="";$("amount").value="";$("notice").textContent="Saved on this phone.";render()}catch(err){$("notice").textContent="Could not save. Export space may be full."}
+});
+$("exportBtn").addEventListener("click",()=>{
+ const blob=new Blob([JSON.stringify({app:"ZedOffline",version:1,exportedAt:new Date().toISOString(),records:readRecords()},null,2)],{type:"application/json"});
+ const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="zedoffline-backup-"+today()+".json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+$("importBtn").addEventListener("click",()=>$("importFile").click());
+$("importFile").addEventListener("change",async e=>{
+ const file=e.target.files[0];if(!file)return;
+ try{const parsed=JSON.parse(await file.text());const rows=Array.isArray(parsed)?parsed:parsed.records;if(!Array.isArray(rows)||!rows.every(r=>r&&typeof r.description==="string"&&Number.isFinite(Number(r.amount))&&["sale","expense"].includes(r.kind)&&typeof r.date==="string"))throw new Error("Invalid backup");
+ if(!confirm("Import will replace the current records. Continue?"))return;
+ writeRecords(rows.map(r=>({...r,amount:Number(r.amount)})));render();$("notice").textContent="Backup imported.";
+ }catch(err){alert("That backup file could not be read.")}finally{$("importFile").value=""}
+});
+$("clearBtn").addEventListener("click",()=>{if(confirm("Permanently delete all records stored in this browser? Export a backup first if needed.")){writeRecords([]);render();$("notice").textContent="All records deleted."}});
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}))}
+render();
+</script>
+</body>
+</html>
